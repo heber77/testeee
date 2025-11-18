@@ -136,11 +136,12 @@ SINKT
 
 MAIC e SINKT são complementares, apesar da possibilidade de serem usados de forma isolada:
 - MAIC automatiza o ensino
-Cria aulas completas, interativas, personalizadas e escaláveis.
+    - Cria aulas completas, interativas, personalizadas e escaláveis.
 - SINKT automatiza a avaliação 
-Detecta domínio conceitual e orienta o próximo passo do aprendizado.
+    - Detecta domínio conceitual e orienta o próximo passo do aprendizado.
+
 Juntos, eles podem formar um ITS extremamente sofisticado:
-MAIC ensina → SINKT mede → MAIC adapta → SINKT monitora (loop).
+- MAIC ensina → SINKT mede → MAIC adapta → SINKT monitora (loop).
 
 
 
