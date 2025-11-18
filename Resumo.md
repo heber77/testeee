@@ -25,13 +25,21 @@ Pode ser usado para diagnosticar o conhecimento do estudante, atualizar seu nív
 ## Comparativo MAIC – SINKT
 
 1. Finalidade
+
 MAIC: criar e gerenciar cursos online com sistemas LLM multiagentes.
+
 SINKT: prever o conhecimento do aluno e sua probabilidade de acerto em próximas questões (KT).
+
 2. Sistema
+
 MAIC: sistema de ensino completo (preparo → ensino → avaliação).
+
 SINKT: módulo analítico dentro de um ITS.
+
 3. Inovações
+
 MAIC: multiagentes + ações pedagógicas estruturadas.
+
 SINKT: KT indutivo com LLM + grafos conceito-questão.
 
 ## O que cada modelo se propõe a resolver:
