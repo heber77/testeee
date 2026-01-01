@@ -14,7 +14,7 @@
   - Remoção automática de colunas administrativas (ID, timestamp, uuid, hash, etc.)
   - Exclusão de abas administrativas (backup, temp, old, test, etc.)
   - Remoção de linhas vazias
-  - Limite de 1000 linhas por aba (evita textos muito longos)
+  - Limite de 1000 linhas por aba (processa primeiras 1000, indica quantas foram ignoradas)
 
 - ✅ **Contrato Padrão Implementado**
   - Segue o contrato `ExtractorOutput[SheetMetadata]`
@@ -151,18 +151,127 @@ python exemplo_extracao.py
 - **Colunas administrativas**: Removidas automaticamente (ID, timestamp, uuid, etc.)
 - **Abas administrativas**: Excluídas (backup, temp, old, test, etc.)
 - **Linhas vazias**: Removidas para texto mais limpo
-- **Limite de linhas**: 1000 linhas por aba (evita textos muito longos)
+- **Limite de linhas**: 1000 linhas por aba (processa primeiras 1000, indica quantas foram ignoradas)
 
-#### 🎯 Fallback com LLM
-- Opcional, configurável via `openai_api_key`
-- Ativado automaticamente quando:
-  - Extração estrutural falha
-  - Texto extraído é muito curto (< 100 caracteres)
-- Pode ser forçado via `force_llm=True`
+#### 🎯 Fallback com LLM (Detalhado)
+
+**Como funciona o Fallback de LLM:**
+
+O LLM é usado como método alternativo quando a extração estrutural (pandas) não é suficiente ou falha. Existem **3 cenários** onde o LLM é acionado:
+
+**Cenário 1: Forçar uso de LLM (`force_llm=True`)**
+```python
+extractor = SheetExtractor(openai_api_key="sua-chave")
+input_data = ExtractorInput(source_uri="planilha.xlsx", force_llm=True)
+result = await extractor.extract(input_data)
+```
+- **Quando**: Você quer usar LLM diretamente, ignorando pandas
+- **Comportamento**: Pula completamente a extração estrutural
+- **Uso**: Útil para planilhas muito complexas ou quando você quer análise mais inteligente
+
+**Cenário 2: Fallback automático por erro (`use_llm_fallback=True` + exceção)**
+```python
+extractor = SheetExtractor(openai_api_key="sua-chave")
+input_data = ExtractorInput(source_uri="planilha.xlsx", use_llm_fallback=True)
+result = await extractor.extract(input_data)
+```
+- **Quando**: A extração estrutural (pandas) lança uma exceção
+- **Comportamento**: Captura o erro e tenta usar LLM como alternativa
+- **Exemplo**: Planilha corrompida, formato incompatível, erro de leitura
+
+**Cenário 3: Fallback automático por texto curto (`use_llm_fallback=True` + < 100 caracteres)**
+```python
+extractor = SheetExtractor(openai_api_key="sua-chave")
+input_data = ExtractorInput(source_uri="planilha.xlsx", use_llm_fallback=True)
+result = await extractor.extract(input_data)
+```
+- **Quando**: A extração estrutural retorna texto muito curto (< 100 caracteres)
+- **Comportamento**: Detecta que o texto extraído é insuficiente e tenta LLM
+- **Exemplo**: Planilha com muitas fórmulas, células vazias, estrutura complexa
+
+**Como o LLM processa a planilha:**
+
+1. **Extração de estrutura** (pandas):
+   - Lê apenas primeiras 50 linhas de cada aba (amostra)
+   - Extrai cabeçalhos e estrutura
+   - Limita a 5 abas para não exceder tokens
+
+2. **Preparação do prompt**:
+   - Converte estrutura em JSON
+   - Cria prompt especializado para conteúdo educacional
+   - Instrui LLM a filtrar dados administrativos
+
+3. **Chamada ao LLM**:
+   - Modelo: `gpt-4o-mini` (mais barato e eficiente)
+   - Temperature: 0.3 (mais determinístico)
+   - Max tokens: 4000 (limite de resposta)
+
+4. **Resultado**:
+   - Texto extraído pelo LLM (formato livre, mas estruturado)
+   - Metadata indica `extraction_method: "llm_fallback"`
+
+**Vantagens do Fallback:**
+- ✅ Resolve casos onde pandas falha
+- ✅ Melhor compreensão de contexto (LLM entende significado)
+- ✅ Filtragem inteligente de conteúdo relevante
+- ✅ Funciona mesmo com planilhas complexas/corrompidas
+
+**Desvantagens:**
+- ⚠️ Requer chave API OpenAI (custo)
+- ⚠️ Mais lento que extração estrutural
+- ⚠️ Menos preciso em contagem de linhas/colunas
 
 #### 🎯 Detecção de Fórmulas
 - Identifica se planilha contém fórmulas (apenas XLSX)
 - Informação incluída na metadata (`has_formulas`)
+
+#### 🎯 Limite de 1000 Linhas por Aba (Detalhado)
+
+**Como funciona o limite de 1000 linhas:**
+
+O extrator processa **apenas as primeiras 1000 linhas** de cada aba para evitar textos muito longos que poderiam:
+- Exceder limites de tokens em LLMs
+- Tornar embeddings ineficientes
+- Gerar textos difíceis de processar
+
+**Comportamento detalhado:**
+
+```python
+max_rows = 1000  # Limite definido no código
+
+# Processa apenas primeiras 1000 linhas
+for idx, row in df_filtered.head(max_rows).iterrows():
+    # Adiciona linha ao texto extraído
+    text_parts.append(f"| {row_values} |")
+
+# Se tiver mais de 1000 linhas, adiciona aviso
+if len(df_filtered) > max_rows:
+    linhas_ignoradas = len(df_filtered) - max_rows
+    text_parts.append(f"\n... ({linhas_ignoradas} linhas adicionais)")
+```
+
+**Exemplo prático:**
+
+Se uma aba tiver **2500 linhas**:
+- ✅ **Processa**: Primeiras 1000 linhas
+- ⚠️ **Ignora**: Últimas 1500 linhas
+- 📝 **Adiciona mensagem**: `"... (1500 linhas adicionais)"` no final do texto
+
+**O que acontece com as linhas ignoradas:**
+- ❌ **NÃO são incluídas** no texto extraído
+- ✅ **São contabilizadas** na metadata (`total_rows` ainda mostra 2500)
+- ✅ **Usuário é informado** através da mensagem no texto
+
+**Por que esse limite?**
+- 🎯 **Performance**: Textos muito longos são lentos para processar
+- 🎯 **Qualidade**: Primeiras linhas geralmente contêm dados mais relevantes
+- 🎯 **Custo**: Evita tokens desnecessários em LLMs
+- 🎯 **Embeddings**: Textos menores geram embeddings mais focados
+
+**Nota importante:**
+- O limite é **por aba**, não por arquivo
+- Se tiver 3 abas com 1000 linhas cada, todas serão processadas
+- A metadata `total_rows` sempre mostra o total real (não apenas as processadas)
 
 ---
 
